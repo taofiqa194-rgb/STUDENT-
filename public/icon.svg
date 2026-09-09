@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#059669" />
+      <stop offset="50%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#0d9488" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a" />
+      <stop offset="50%" stop-color="#facc15" />
+      <stop offset="100%" stop-color="#eab308" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#064e3b" flood-opacity="0.35" />
+    </filter>
+  </defs>
+
+  <!-- Background rounded squircle -->
+  <rect width="512" height="512" rx="128" fill="url(#bgGrad)" />
+
+  <!-- Inner glow & border -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="none" stroke="#ffffff" stroke-opacity="0.15" stroke-width="4" />
+
+  <!-- Core Emblem Graphic -->
+  <g filter="url(#shadow)">
+    <!-- Graduation Cap / Student Identity -->
+    <path d="M256 120 L390 185 L256 250 L122 185 Z" fill="#ffffff" />
+    <path d="M360 205 L360 270 C360 270 320 310 256 310 C192 310 152 270 152 270 L152 205 L256 256 Z" fill="#ecfdf5" fill-opacity="0.95" />
+    <circle cx="390" cy="190" r="10" fill="url(#goldGrad)" />
+    <path d="M390 196 C392 230 405 255 410 275" stroke="url(#goldGrad)" stroke-width="8" stroke-linecap="round" fill="none" />
+    <rect x="402" y="275" width="16" height="24" rx="4" fill="url(#goldGrad)" />
+
+    <!-- Wallet / Money Emblem (Naira symbol badge) -->
+    <g transform="translate(145, 275)">
+      <rect width="105" height="95" rx="20" fill="#ffffff" />
+      <rect x="6" y="6" width="93" height="83" rx="16" fill="#047857" />
+      <!-- Naira 'N' with double bar -->
+      <text x="52" y="60" font-family="Arial, sans-serif" font-weight="900" font-size="52" fill="#facc15" text-anchor="middle">₦</text>
+    </g>
+
+    <!-- Campus Finder / Magnifying Glass Emblem -->
+    <g transform="translate(265, 275)">
+      <rect width="105" height="95" rx="20" fill="#ffffff" />
+      <rect x="6" y="6" width="93" height="83" rx="16" fill="#0f766e" />
+      <!-- Magnifying Glass with Pin -->
+      <circle cx="50" cy="45" r="24" fill="none" stroke="#ffffff" stroke-width="8" />
+      <path d="M68 62 L84 78" stroke="#ffffff" stroke-width="8" stroke-linecap="round" />
+      <circle cx="50" cy="45" r="8" fill="#38bdf8" />
+    </g>
+  </g>
+
+  <!-- Small star sparkles -->
+  <circle cx="100" cy="110" r="8" fill="#ffffff" fill-opacity="0.4" />
+  <circle cx="420" cy="100" r="12" fill="#ffffff" fill-opacity="0.3" />
+  <circle cx="256" cy="430" r="6" fill="#facc15" fill-opacity="0.8" />
+</svg>

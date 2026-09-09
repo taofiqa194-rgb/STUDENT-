@@ -1,0 +1,6 @@
+{
+  "name": "StudentMate",
+  "description": "A modern student-focused platform designed to help university students manage their money and report or find lost items on campus.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
