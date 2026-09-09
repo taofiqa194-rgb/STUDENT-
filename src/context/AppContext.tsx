@@ -502,39 +502,40 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
   // 2. Real-time Firestore sync for current user finances & notifications
+  // Adheres to rule: Only attach private onSnapshot listeners when auth is authenticated
   useEffect(() => {
-    if (!currentUser?.id) return;
+    if (!firebaseUser?.uid) return;
 
     // Listen to expenses
-    const unsubExpenses = subscribeToUserExpenses(currentUser.id, (fbExpenses) => {
+    const unsubExpenses = subscribeToUserExpenses(firebaseUser.uid, (fbExpenses) => {
       if (fbExpenses.length > 0) {
         setExpenses(fbExpenses);
       }
     });
 
     // Listen to income
-    const unsubIncome = subscribeToUserIncome(currentUser.id, (fbIncomes) => {
+    const unsubIncome = subscribeToUserIncome(firebaseUser.uid, (fbIncomes) => {
       if (fbIncomes.length > 0) {
         setIncomes(fbIncomes);
       }
     });
 
     // Listen to savings goals
-    const unsubGoals = subscribeToUserSavingsGoals(currentUser.id, (fbGoals) => {
+    const unsubGoals = subscribeToUserSavingsGoals(firebaseUser.uid, (fbGoals) => {
       if (fbGoals.length > 0) {
         setSavingsGoals(fbGoals);
       }
     });
 
     // Listen to notifications
-    const unsubNotifs = subscribeToUserNotifications(currentUser.id, (fbNotifs) => {
+    const unsubNotifs = subscribeToUserNotifications(firebaseUser.uid, (fbNotifs) => {
       if (fbNotifs.length > 0) {
         setNotifications(fbNotifs);
       }
     });
 
     // Listen to user messages
-    const unsubMessages = subscribeToMessages(currentUser.id, (fbMsgs) => {
+    const unsubMessages = subscribeToMessages(firebaseUser.uid, (fbMsgs) => {
       setMessages(fbMsgs);
     });
 
@@ -545,9 +546,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       unsubNotifs();
       unsubMessages();
     };
-  }, [currentUser?.id]);
+  }, [firebaseUser?.uid]);
 
-  // 3. Real-time Firestore sync for public items, matches, and all users
+  // 3. Real-time Firestore sync for public items and matches
   useEffect(() => {
     const unsubItems = subscribeToCampusItems((fbItems) => {
       if (fbItems.length > 0) {
@@ -560,6 +561,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setMatches(fbMatches);
       }
     });
+
+    return () => {
+      unsubItems();
+      unsubMatches();
+    };
+  }, []);
+
+  // 4. Real-time Firestore sync for all users (strictly for verified admin)
+  useEffect(() => {
+    if (!firebaseUser?.uid || currentUser?.role !== 'admin') return;
 
     const unsubUsers = subscribeToAllUsers((fbUsers) => {
       if (fbUsers.length > 0) {
@@ -574,11 +585,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
 
     return () => {
-      unsubItems();
-      unsubMatches();
       unsubUsers();
     };
-  }, []);
+  }, [firebaseUser?.uid, currentUser?.role]);
 
   // -------------------------------------------------------------
   // CALCULATED FINANCIAL VALUES (SAFELY DERIVED FROM TRANSACTIONS)

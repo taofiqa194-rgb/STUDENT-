@@ -1,0 +1,199 @@
+{
+  "entities": {
+    "user": {
+      "title": "User",
+      "description": "Student or administrator profile information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fullName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "format": "email", "maxLength": 120 },
+        "phoneNumber": { "type": "string", "maxLength": 30 },
+        "university": { "type": "string", "maxLength": 100 },
+        "faculty": { "type": "string", "maxLength": 100 },
+        "department": { "type": "string", "maxLength": 100 },
+        "level": { "type": "string", "maxLength": 30 },
+        "matricNumber": { "type": "string", "maxLength": 50 },
+        "avatarUrl": { "type": "string", "maxLength": 500 },
+        "role": { "type": "string", "enum": ["student", "admin"] },
+        "verificationStatus": { "type": "string", "enum": ["pending", "verified", "rejected"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "fullName", "email", "role", "verificationStatus"]
+    },
+    "expense": {
+      "title": "Expense",
+      "description": "Daily student expense tracking entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string", "maxLength": 128 },
+        "amount": { "type": "number" },
+        "category": { "type": "string", "maxLength": 50 },
+        "title": { "type": "string", "maxLength": 150 },
+        "date": { "type": "string" },
+        "note": { "type": "string", "maxLength": 300 },
+        "paymentMethod": { "type": "string", "maxLength": 50 },
+        "receiptUrl": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "amount", "category", "title", "date"]
+    },
+    "income": {
+      "title": "Income",
+      "description": "Student allowance, freelance, or gift inflow",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string", "maxLength": 128 },
+        "amount": { "type": "number" },
+        "source": { "type": "string", "maxLength": 100 },
+        "date": { "type": "string" },
+        "note": { "type": "string", "maxLength": 300 },
+        "recurring": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "amount", "source", "date"]
+    },
+    "savingsGoal": {
+      "title": "SavingsGoal",
+      "description": "Target savings fund for books, rent, laptop, etc.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 150 },
+        "targetAmount": { "type": "number" },
+        "currentAmount": { "type": "number" },
+        "targetDate": { "type": "string" },
+        "category": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "title", "targetAmount", "currentAmount"]
+    },
+    "campusItem": {
+      "title": "CampusItem",
+      "description": "Lost or found item posted on campus bulletin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "enum": ["lost", "found"] },
+        "title": { "type": "string", "maxLength": 150 },
+        "category": { "type": "string", "maxLength": 50 },
+        "description": { "type": "string", "maxLength": 500 },
+        "location": { "type": "string", "maxLength": 150 },
+        "dateTime": { "type": "string", "maxLength": 50 },
+        "imageUrl": { "type": "string", "maxLength": 500 },
+        "university": { "type": "string", "maxLength": 100 },
+        "status": { "type": "string", "enum": ["active", "claimed", "resolved"] },
+        "reward": { "type": "number" },
+        "safeHandoverPoint": { "type": "string", "maxLength": 150 },
+        "contactPreference": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "type", "title", "category", "location", "status"]
+    },
+    "match": {
+      "title": "Match",
+      "description": "Smart match between lost and found item records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "lostItemId": { "type": "string", "maxLength": 128 },
+        "foundItemId": { "type": "string", "maxLength": 128 },
+        "score": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "lostItemId", "foundItemId", "score"]
+    },
+    "chatMessage": {
+      "title": "ChatMessage",
+      "description": "Safe peer message regarding lost and found recovery",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "senderId": { "type": "string", "maxLength": 128 },
+        "receiverId": { "type": "string", "maxLength": 128 },
+        "conversationId": { "type": "string", "maxLength": 256 },
+        "text": { "type": "string", "maxLength": 1000 },
+        "itemId": { "type": "string", "maxLength": 128 },
+        "timestamp": { "type": "string" },
+        "isRead": { "type": "boolean" }
+      },
+      "required": ["id", "senderId", "receiverId", "text", "timestamp"]
+    },
+    "notification": {
+      "title": "Notification",
+      "description": "Student notification for matches, verification, and budget alerts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 150 },
+        "message": { "type": "string", "maxLength": 500 },
+        "type": { "type": "string", "maxLength": 50 },
+        "isRead": { "type": "boolean" },
+        "timestamp": { "type": "string" },
+        "linkTab": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "userId", "title", "message", "isRead", "timestamp"]
+    },
+    "announcement": {
+      "title": "Announcement",
+      "description": "Campus-wide official student bulletin alert",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 200 },
+        "content": { "type": "string", "maxLength": 1000 },
+        "authorName": { "type": "string", "maxLength": 100 },
+        "priority": { "type": "string", "enum": ["normal", "urgent"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title", "content", "priority"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "user",
+      "description": "Student and admin profile documents"
+    },
+    "/expenses/{expenseId}": {
+      "schema": "expense",
+      "description": "Private student expense transactions"
+    },
+    "/income/{incomeId}": {
+      "schema": "income",
+      "description": "Private student income and allowance entries"
+    },
+    "/savingsGoals/{goalId}": {
+      "schema": "savingsGoal",
+      "description": "Private student savings targets"
+    },
+    "/lostItems/{itemId}": {
+      "schema": "campusItem",
+      "description": "Publicly discoverable lost campus items"
+    },
+    "/foundItems/{itemId}": {
+      "schema": "campusItem",
+      "description": "Publicly discoverable found campus items"
+    },
+    "/matches/{matchId}": {
+      "schema": "match",
+      "description": "Smart matches connecting lost and found items"
+    },
+    "/messages/{messageId}": {
+      "schema": "chatMessage",
+      "description": "Private messages between item owner and finder"
+    },
+    "/notifications/{notifId}": {
+      "schema": "notification",
+      "description": "User notifications"
+    },
+    "/announcements/{annId}": {
+      "schema": "announcement",
+      "description": "Campus announcements"
+    }
+  }
+}

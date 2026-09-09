@@ -2,26 +2,36 @@ export type VerificationStatus = 'pending' | 'verified' | 'rejected';
 
 export type UserRole = 'student' | 'admin';
 
+export type InstitutionType = 'University' | 'Polytechnic' | 'College of Education' | 'Other';
+
 export interface User {
   id: string;
+  uid?: string; // compatibility alias
   fullName: string;
   name?: string; // compatibility alias for fullName
   email: string;
-  phoneNumber: string;
+  phoneNumber?: string;
+  phone?: string; // compatibility alias
   university: string;
+  institution?: string; // generic institution name for any school
+  institutionType?: InstitutionType;
+  course?: string; // Course or Programme of study
   shortUni?: string; // compatibility alias for short university name
-  faculty: string;
+  faculty?: string;
   department: string;
-  level: string; // e.g. '100 Level', '200 Level', '300 Level', '400 Level', '500 Level'
-  matricNumber: string;
+  level: string; // e.g. '100 Level', '200 Level', 'ND 1', 'HND 1'
+  matricNumber?: string;
   avatarUrl?: string;
+  photoURL?: string; // compatibility alias
   avatar?: string; // compatibility alias for avatarUrl
   role: UserRole;
   verificationStatus: VerificationStatus;
   verificationSubmittedAt?: string;
   studentIdCardUrl?: string;
   isSuspended?: boolean;
+  isProfileComplete?: boolean;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export type ExpenseCategory =
@@ -95,28 +105,51 @@ export type ItemCategory =
   | 'Accessories'
   | 'Other';
 
+export type ItemStatus =
+  | 'lost'
+  | 'found'
+  | 'possible match'
+  | 'recovered'
+  | 'closed'
+  | 'active'
+  | 'resolved'
+  | 'matched'
+  | 'verifying';
+
 export interface CampusItem {
   id: string;
+  itemId?: string; // compatibility alias
   userId: string;
+  reporterId?: string; // compatibility alias for userId
   type: ItemType;
+  itemName?: string;
   title: string;
   category: ItemCategory;
   description: string;
   location: string;
+  dateLost?: string;
+  timeLost?: string;
+  dateFound?: string;
+  timeFound?: string;
   dateTime: string;
   date?: string; // compatibility alias
+  imageUrls?: string[];
   imageUrl?: string;
+  identifyingDetails?: string;
   additionalDetails?: string;
-  university: string;
-  status: 'active' | 'resolved' | 'matched' | 'lost' | 'found' | 'verifying';
+  institution?: string;
+  university?: string; // compatibility alias
+  status: ItemStatus;
   isReported?: boolean;
-  reportedBy?: string; // compatibility alias
+  reportedBy?: any; // compatibility alias
   reporterName?: string; // compatibility alias
+  reporterVerified?: boolean;
   reward?: number;
   safeHandoverPoint?: string;
   verificationQuestion?: string;
   contactPreference?: 'chat' | 'whatsapp';
   createdAt: string;
+  updatedAt?: string;
 }
 
 

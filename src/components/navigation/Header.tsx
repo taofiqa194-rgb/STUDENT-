@@ -9,7 +9,7 @@ import {
   User as UserIcon,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { UNIVERSITIES } from '../../data/mockData';
+import { INSTITUTIONS } from '../../data/institutions';
 
 interface HeaderProps {
   onOpenNotifications: () => void;

@@ -4,11 +4,11 @@ import {
   doc,
   setDoc,
   getDocs,
+  getDoc,
   deleteDoc,
   updateDoc,
   query,
   where,
-  orderBy,
   limit,
   onSnapshot,
   uploadFileToStorage,
@@ -18,12 +18,207 @@ import {
   CampusItem,
   ItemType,
   ItemCategory,
+  ItemStatus,
   PossibleMatch,
   ChatMessage,
 } from '../types';
+import { compressImage } from '../lib/imageCompressor';
+
+export interface ReportLostItemPayload {
+  itemName: string;
+  category: ItemCategory;
+  description: string;
+  location: string;
+  dateLost: string;
+  timeLost?: string;
+  imageFiles?: File[];
+  imageUrls?: string[];
+  identifyingDetails?: string;
+  institution?: string;
+  reward?: number;
+  contactPreference?: 'chat' | 'whatsapp';
+}
+
+export interface ReportFoundItemPayload {
+  itemName: string;
+  category: ItemCategory;
+  description: string;
+  location: string;
+  dateFound: string;
+  timeFound?: string;
+  imageFiles?: File[];
+  imageUrls?: string[];
+  identifyingDetails?: string;
+  institution?: string;
+  safeHandoverPoint?: string;
+  contactPreference?: 'chat' | 'whatsapp';
+}
 
 /**
- * Report a lost or found item to Firestore with Firebase Storage image upload
+ * Upload multiple images with compression to Firebase Storage
+ * Path: lost-found/{userId}/{itemId}/
+ */
+async function uploadItemImages(
+  userId: string,
+  itemId: string,
+  imageFiles: File[] = []
+): Promise<string[]> {
+  const uploadedUrls: string[] = [];
+
+  for (let i = 0; i < imageFiles.length; i++) {
+    const file = imageFiles[i];
+    try {
+      const compressedBlob = await compressImage(file);
+      const fileName = `${Date.now()}_img_${i + 1}.jpg`;
+      const storagePath = `lost-found/${userId}/${itemId}/${fileName}`;
+      const url = await uploadFileToStorage(storagePath, compressedBlob);
+      if (url) {
+        uploadedUrls.push(url);
+      }
+    } catch (err) {
+      console.warn(`Failed to upload image ${i}:`, err);
+    }
+  }
+
+  return uploadedUrls;
+}
+
+/**
+ * Report Lost Item to Firestore
+ * Collection: lostItems
+ * Fields specified in Requirement 5
+ */
+export async function reportLostItem(
+  userId: string,
+  payload: ReportLostItemPayload
+): Promise<CampusItem> {
+  try {
+    const itemDocRef = doc(collection(db, 'lostItems'));
+    const itemId = itemDocRef.id;
+    const nowIso = new Date().toISOString();
+
+    // 1. Upload images to Firebase Storage
+    let finalImageUrls: string[] = payload.imageUrls || [];
+    if (payload.imageFiles && payload.imageFiles.length > 0) {
+      const uploaded = await uploadItemImages(userId, itemId, payload.imageFiles);
+      finalImageUrls = [...finalImageUrls, ...uploaded];
+    }
+
+    const primaryImageUrl = finalImageUrls[0] || '';
+
+    // 2. Create document in Firestore under lostItems
+    const lostItemDoc: Record<string, any> = {
+      itemId,
+      id: itemId,
+      userId,
+      reporterId: userId,
+      itemName: payload.itemName.trim(),
+      title: payload.itemName.trim(), // sync alias
+      category: payload.category,
+      description: payload.description.trim(),
+      location: payload.location.trim(),
+      dateLost: payload.dateLost,
+      timeLost: payload.timeLost || '',
+      date: payload.dateLost,
+      dateTime: payload.timeLost ? `${payload.dateLost} ${payload.timeLost}` : payload.dateLost,
+      imageUrls: finalImageUrls,
+      imageUrl: primaryImageUrl,
+      identifyingDetails: payload.identifyingDetails || '',
+      institution: payload.institution || 'Tertiary Institution',
+      university: payload.institution || 'Tertiary Institution',
+      reward: payload.reward ? Number(payload.reward) : undefined,
+      contactPreference: payload.contactPreference || 'chat',
+      status: 'lost' as ItemStatus,
+      type: 'lost' as ItemType,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    await setDoc(itemDocRef, lostItemDoc);
+
+    const createdItem = formatItemDoc(itemId, 'lost', lostItemDoc);
+
+    // Run matching asynchronously
+    runSmartMatchingForNewItem(createdItem).catch((err) =>
+      console.warn('Smart matching error:', err)
+    );
+
+    return createdItem;
+  } catch (error) {
+    console.error('Failed to submit lost item:', error);
+    throw new Error(getFriendlyFirebaseErrorMessage(error));
+  }
+}
+
+/**
+ * Report Found Item to Firestore
+ * Collection: foundItems
+ * Fields specified in Requirement 6
+ */
+export async function reportFoundItem(
+  userId: string,
+  payload: ReportFoundItemPayload
+): Promise<CampusItem> {
+  try {
+    const itemDocRef = doc(collection(db, 'foundItems'));
+    const itemId = itemDocRef.id;
+    const nowIso = new Date().toISOString();
+
+    // 1. Upload images to Firebase Storage
+    let finalImageUrls: string[] = payload.imageUrls || [];
+    if (payload.imageFiles && payload.imageFiles.length > 0) {
+      const uploaded = await uploadItemImages(userId, itemId, payload.imageFiles);
+      finalImageUrls = [...finalImageUrls, ...uploaded];
+    }
+
+    const primaryImageUrl = finalImageUrls[0] || '';
+
+    // 2. Create document in Firestore under foundItems
+    const foundItemDoc: Record<string, any> = {
+      itemId,
+      id: itemId,
+      userId,
+      reporterId: userId,
+      itemName: payload.itemName.trim(),
+      title: payload.itemName.trim(), // sync alias
+      category: payload.category,
+      description: payload.description.trim(),
+      location: payload.location.trim(),
+      dateFound: payload.dateFound,
+      timeFound: payload.timeFound || '',
+      date: payload.dateFound,
+      dateTime: payload.timeFound ? `${payload.dateFound} ${payload.timeFound}` : payload.dateFound,
+      imageUrls: finalImageUrls,
+      imageUrl: primaryImageUrl,
+      identifyingDetails: payload.identifyingDetails || '',
+      institution: payload.institution || 'Tertiary Institution',
+      university: payload.institution || 'Tertiary Institution',
+      safeHandoverPoint: payload.safeHandoverPoint || '',
+      contactPreference: payload.contactPreference || 'chat',
+      status: 'found' as ItemStatus,
+      type: 'found' as ItemType,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    await setDoc(itemDocRef, foundItemDoc);
+
+    const createdItem = formatItemDoc(itemId, 'found', foundItemDoc);
+
+    // Run matching asynchronously
+    runSmartMatchingForNewItem(createdItem).catch((err) =>
+      console.warn('Smart matching error:', err)
+    );
+
+    return createdItem;
+  } catch (error) {
+    console.error('Failed to submit found item:', error);
+    throw new Error(getFriendlyFirebaseErrorMessage(error));
+  }
+}
+
+/**
+ * Legacy wrapper for reporting items
  */
 export async function reportCampusItemToFirestore(
   userId: string,
@@ -36,6 +231,7 @@ export async function reportCampusItemToFirestore(
     location: string;
     dateTime: string;
     imageFileOrUrl?: File | string;
+    imageFiles?: File[];
     additionalDetails?: string;
     reward?: number;
     safeHandoverPoint?: string;
@@ -43,133 +239,115 @@ export async function reportCampusItemToFirestore(
     contactPreference?: 'chat' | 'whatsapp';
   }
 ): Promise<CampusItem> {
-  try {
-    const targetCollection = data.type === 'lost' ? 'lostItems' : 'foundItems';
-    const itemDocRef = doc(collection(db, targetCollection));
-    const nowIso = new Date().toISOString();
-
-    let uploadedImageUrl = '';
-    if (data.imageFileOrUrl) {
-      const storagePath = `${data.type === 'lost' ? 'lost_items' : 'found_items'}/${itemDocRef.id}_${Date.now()}`;
-      uploadedImageUrl = await uploadFileToStorage(storagePath, data.imageFileOrUrl);
+  const imageFiles: File[] = [];
+  let imageUrls: string[] = [];
+  if (data.imageFileOrUrl) {
+    if (typeof data.imageFileOrUrl === 'string') {
+      imageUrls.push(data.imageFileOrUrl);
     } else {
-      // Clean fallback image based on category
-      uploadedImageUrl =
-        data.category === 'Electronics' || data.category === 'Laptop' || data.category === 'Phone'
-          ? 'https://images.unsplash.com/photo-1611117775350-ac3950990985?w=500&auto=format&fit=crop&q=80'
-          : data.category === 'Backpack' || data.category === 'Bags'
-          ? 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=500&auto=format&fit=crop&q=80'
-          : data.category === 'Keys'
-          ? 'https://images.unsplash.com/photo-1582139329536-e7284fece509?w=500&auto=format&fit=crop&q=80'
-          : 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=500&auto=format&fit=crop&q=80';
+      imageFiles.push(data.imageFileOrUrl);
     }
+  }
+  if (data.imageFiles) {
+    imageFiles.push(...data.imageFiles);
+  }
 
-    const newItem: CampusItem = {
-      id: itemDocRef.id,
-      userId,
-      type: data.type,
-      title: data.title.trim(),
+  if (data.type === 'lost') {
+    return await reportLostItem(userId, {
+      itemName: data.title,
       category: data.category,
-      description: data.description.trim(),
-      location: data.location.trim(),
-      dateTime: data.dateTime || 'Recently',
-      imageUrl: uploadedImageUrl,
-      additionalDetails: data.additionalDetails,
-      university: userUniversity,
-      status: 'active',
-      reward: data.reward ? Number(data.reward) : undefined,
-      safeHandoverPoint: data.safeHandoverPoint || 'Campus Security Gate',
-      verificationQuestion: data.verificationQuestion || '',
-      contactPreference: data.contactPreference || 'chat',
-      createdAt: nowIso,
-    };
-
-    await setDoc(itemDocRef, newItem);
-
-    // Also run match check against opposite collection
-    try {
-      await runSmartMatchingForNewItem(newItem);
-    } catch (matchErr) {
-      console.warn('Smart matching evaluation warning:', matchErr);
-    }
-
-    return newItem;
-  } catch (error) {
-    console.error('Failed to report item to Firestore:', error);
-    throw new Error(getFriendlyFirebaseErrorMessage(error));
+      description: data.description,
+      location: data.location,
+      dateLost: data.dateTime || new Date().toISOString().split('T')[0],
+      timeLost: '',
+      imageFiles,
+      imageUrls,
+      identifyingDetails: data.additionalDetails || data.verificationQuestion,
+      institution: userUniversity,
+      reward: data.reward,
+      contactPreference: data.contactPreference,
+    });
+  } else {
+    return await reportFoundItem(userId, {
+      itemName: data.title,
+      category: data.category,
+      description: data.description,
+      location: data.location,
+      dateFound: data.dateTime || new Date().toISOString().split('T')[0],
+      timeFound: '',
+      imageFiles,
+      imageUrls,
+      identifyingDetails: data.additionalDetails || data.verificationQuestion,
+      institution: userUniversity,
+      safeHandoverPoint: data.safeHandoverPoint,
+      contactPreference: data.contactPreference,
+    });
   }
 }
 
 /**
- * Run smart match algorithm and write matches to Firestore
+ * Helper to normalize item from Firestore doc
  */
-async function runSmartMatchingForNewItem(newItem: CampusItem): Promise<void> {
-  const oppositeCollection = newItem.type === 'lost' ? 'foundItems' : 'lostItems';
-  const q = query(
-    collection(db, oppositeCollection),
-    where('status', '==', 'active'),
-    limit(30)
-  );
-  const snap = await getDocs(q);
+function formatItemDoc(docId: string, itemType: ItemType, data: Record<string, any>): CampusItem {
+  const itemName = data.itemName || data.title || 'Untitled Item';
+  const imageUrls: string[] = Array.isArray(data.imageUrls)
+    ? data.imageUrls
+    : data.imageUrl
+    ? [data.imageUrl]
+    : [];
 
-  const titleWords = newItem.title.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
-  const locLower = newItem.location.toLowerCase();
+  const rawStatus = (data.status || (itemType === 'lost' ? 'lost' : 'found')).toLowerCase();
+  let status: ItemStatus = 'active';
+  if (rawStatus === 'recovered') status = 'recovered';
+  else if (rawStatus === 'closed') status = 'closed';
+  else if (rawStatus === 'possible match') status = 'possible match';
+  else if (rawStatus === 'lost') status = 'lost';
+  else if (rawStatus === 'found') status = 'found';
+  else status = 'active';
 
-  for (const docSnap of snap.docs) {
-    const oppItem = docSnap.data() as CampusItem;
-    const oppTitle = oppItem.title.toLowerCase();
-    const oppLoc = oppItem.location.toLowerCase();
-
-    const categoryMatch = oppItem.category === newItem.category;
-    const titleMatch = titleWords.some((w) => oppTitle.includes(w));
-    const locMatch = oppLoc.includes(locLower) || locLower.includes(oppLoc);
-
-    if (categoryMatch || titleMatch) {
-      const score = (categoryMatch ? 50 : 0) + (titleMatch ? 30 : 0) + (locMatch ? 20 : 0);
-      if (score >= 60) {
-        const lostId = newItem.type === 'lost' ? newItem.id : oppItem.id;
-        const foundId = newItem.type === 'found' ? newItem.id : oppItem.id;
-
-        const matchDocRef = doc(collection(db, 'matches'));
-        const matchData: PossibleMatch = {
-          id: matchDocRef.id,
-          lostItemId: lostId,
-          foundItemId: foundId,
-          score,
-          reason: `${categoryMatch ? 'Category matches (' + newItem.category + ')' : ''} ${locMatch ? '• Similar location (' + newItem.location + ')' : ''}`.trim(),
-          status: 'pending',
-          createdAt: new Date().toISOString(),
-        };
-
-        await setDoc(matchDocRef, matchData);
-
-        // Add in-app notification for the seeker
-        const seekerId = newItem.type === 'lost' ? newItem.userId : oppItem.userId;
-        const notifDocRef = doc(collection(db, 'notifications'));
-        await setDoc(notifDocRef, {
-          id: notifDocRef.id,
-          userId: seekerId,
-          type: 'match',
-          title: '🔍 Possible Lost & Found Match!',
-          message: `A report for "${newItem.title}" closely matches an item in ${newItem.location}.`,
-          isRead: false,
-          timestamp: new Date().toISOString(),
-          relatedId: matchDocRef.id,
-          linkTab: 'lost-found',
-          createdAt: new Date().toISOString(),
-        });
-      }
-    }
-  }
+  return {
+    id: docId,
+    itemId: docId,
+    userId: data.userId || data.reporterId || '',
+    reporterId: data.userId || data.reporterId || '',
+    type: itemType,
+    itemName,
+    title: itemName,
+    category: (data.category as ItemCategory) || 'Other',
+    description: data.description || '',
+    location: data.location || '',
+    dateLost: data.dateLost || data.date,
+    timeLost: data.timeLost || '',
+    dateFound: data.dateFound || data.date,
+    timeFound: data.timeFound || '',
+    dateTime: data.dateTime || data.dateLost || data.dateFound || data.date || '',
+    date: data.date || data.dateLost || data.dateFound || '',
+    imageUrls,
+    imageUrl: imageUrls[0] || data.imageUrl || '',
+    identifyingDetails: data.identifyingDetails || data.additionalDetails || '',
+    additionalDetails: data.identifyingDetails || data.additionalDetails || '',
+    institution: data.institution || data.university || '',
+    university: data.institution || data.university || '',
+    status,
+    reporterName: data.reporterName || 'Campus Student',
+    reward: data.reward,
+    safeHandoverPoint: data.safeHandoverPoint,
+    verificationQuestion: data.verificationQuestion || data.identifyingDetails,
+    contactPreference: data.contactPreference || 'chat',
+    createdAt: data.createdAt || new Date().toISOString(),
+    updatedAt: data.updatedAt || new Date().toISOString(),
+  };
 }
 
 /**
- * Update item status in Firestore
+ * Update item status in Firestore (e.g. 'recovered', 'closed')
+ * Requirement 11: When an owner marks a lost item as recovered,
+ * update the Firestore document so it no longer appears as active.
  */
 export async function updateItemStatusInFirestore(
   itemId: string,
   type: ItemType,
-  status: 'active' | 'resolved' | 'matched' | 'lost' | 'found' | 'verifying'
+  status: ItemStatus
 ): Promise<void> {
   try {
     const targetColl = type === 'lost' ? 'lostItems' : 'foundItems';
@@ -184,7 +362,43 @@ export async function updateItemStatusInFirestore(
 }
 
 /**
- * Delete campus item from Firestore
+ * Edit an existing report in Firestore (owner only)
+ */
+export async function editItemInFirestore(
+  itemId: string,
+  type: ItemType,
+  updates: Partial<CampusItem>
+): Promise<void> {
+  try {
+    const targetColl = type === 'lost' ? 'lostItems' : 'foundItems';
+    const cleanUpdates: Record<string, any> = {
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (updates.itemName) {
+      cleanUpdates.itemName = updates.itemName.trim();
+      cleanUpdates.title = updates.itemName.trim();
+    } else if (updates.title) {
+      cleanUpdates.itemName = updates.title.trim();
+      cleanUpdates.title = updates.title.trim();
+    }
+
+    if (updates.category) cleanUpdates.category = updates.category;
+    if (updates.description) cleanUpdates.description = updates.description.trim();
+    if (updates.location) cleanUpdates.location = updates.location.trim();
+    if (updates.identifyingDetails !== undefined) cleanUpdates.identifyingDetails = updates.identifyingDetails;
+    if (updates.status) cleanUpdates.status = updates.status;
+    if (updates.reward !== undefined) cleanUpdates.reward = updates.reward;
+
+    await updateDoc(doc(db, targetColl, itemId), cleanUpdates);
+  } catch (error) {
+    console.error('Failed to edit item:', error);
+    throw new Error(getFriendlyFirebaseErrorMessage(error));
+  }
+}
+
+/**
+ * Delete campus item from Firestore (owner or admin only)
  */
 export async function deleteCampusItemFromFirestore(
   itemId: string,
@@ -200,7 +414,8 @@ export async function deleteCampusItemFromFirestore(
 }
 
 /**
- * Subscribe to all lost and found items from Firestore
+ * Real-time subscription to Lost & Found items
+ * Uses limit to avoid reading the entire collection every time (Requirement 7)
  */
 export function subscribeToCampusItems(
   callback: (items: CampusItem[]) => void
@@ -215,11 +430,11 @@ export function subscribeToCampusItems(
   };
 
   const unsubLost = onSnapshot(
-    query(collection(db, 'lostItems'), limit(100)),
+    query(collection(db, 'lostItems'), limit(50)),
     (snapshot) => {
       lostItemsList = [];
       snapshot.forEach((docSnap) => {
-        lostItemsList.push({ ...docSnap.data(), id: docSnap.id, type: 'lost' } as CampusItem);
+        lostItemsList.push(formatItemDoc(docSnap.id, 'lost', docSnap.data()));
       });
       updateCombined();
     },
@@ -227,11 +442,11 @@ export function subscribeToCampusItems(
   );
 
   const unsubFound = onSnapshot(
-    query(collection(db, 'foundItems'), limit(100)),
+    query(collection(db, 'foundItems'), limit(50)),
     (snapshot) => {
       foundItemsList = [];
       snapshot.forEach((docSnap) => {
-        foundItemsList.push({ ...docSnap.data(), id: docSnap.id, type: 'found' } as CampusItem);
+        foundItemsList.push(formatItemDoc(docSnap.id, 'found', docSnap.data()));
       });
       updateCombined();
     },
@@ -242,6 +457,78 @@ export function subscribeToCampusItems(
     unsubLost();
     unsubFound();
   };
+}
+
+/**
+ * Run smart match detection between lost and found items
+ * Requirement 12: Prepare the architecture for matching lost and found items.
+ * Does NOT automatically claim the item.
+ */
+async function runSmartMatchingForNewItem(newItem: CampusItem): Promise<void> {
+  const oppositeCollection = newItem.type === 'lost' ? 'foundItems' : 'lostItems';
+  const q = query(
+    collection(db, oppositeCollection),
+    where('status', 'in', ['active', 'lost', 'found']),
+    limit(25)
+  );
+  const snap = await getDocs(q);
+
+  const titleWords = (newItem.itemName || newItem.title || '')
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 3);
+  const locLower = (newItem.location || '').toLowerCase();
+
+  for (const docSnap of snap.docs) {
+    const oppItem = formatItemDoc(docSnap.id, newItem.type === 'lost' ? 'found' : 'lost', docSnap.data());
+    const oppTitle = (oppItem.itemName || oppItem.title || '').toLowerCase();
+    const oppLoc = (oppItem.location || '').toLowerCase();
+
+    const categoryMatch = oppItem.category === newItem.category;
+    const titleMatch = titleWords.some((w) => oppTitle.includes(w));
+    const locMatch = oppLoc.length > 3 && (oppLoc.includes(locLower) || locLower.includes(oppLoc));
+
+    if (categoryMatch || titleMatch) {
+      const score = (categoryMatch ? 50 : 0) + (titleMatch ? 30 : 0) + (locMatch ? 20 : 0);
+      if (score >= 50) {
+        const lostId = newItem.type === 'lost' ? newItem.id : oppItem.id;
+        const foundId = newItem.type === 'found' ? newItem.id : oppItem.id;
+
+        const matchDocRef = doc(collection(db, 'matches'));
+        const matchData: PossibleMatch = {
+          id: matchDocRef.id,
+          lostItemId: lostId,
+          foundItemId: foundId,
+          score,
+          reason: `${categoryMatch ? 'Category matches (' + newItem.category + ')' : ''} ${
+            locMatch ? '• Similar location (' + newItem.location + ')' : ''
+          }`.trim(),
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+        };
+
+        await setDoc(matchDocRef, matchData);
+
+        // Notify the seeker in-app
+        const seekerId = newItem.type === 'lost' ? newItem.userId : oppItem.userId;
+        if (seekerId) {
+          const notifDocRef = doc(collection(db, 'notifications'));
+          await setDoc(notifDocRef, {
+            id: notifDocRef.id,
+            userId: seekerId,
+            type: 'match',
+            title: '🔍 Possible Match Detected',
+            message: `A report for "${newItem.itemName || newItem.title}" matches your item details.`,
+            isRead: false,
+            timestamp: new Date().toISOString(),
+            relatedId: matchDocRef.id,
+            linkTab: 'lost-found',
+            createdAt: new Date().toISOString(),
+          });
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -265,7 +552,9 @@ export function subscribeToMatches(
 }
 
 /**
- * Send safe in-app message
+ * In-app messaging for contacting reporters safely
+ * Requirement 9: Contact Reporter opens an in-app conversation or secure contact mechanism.
+ * Do NOT expose reporter's email or phone number.
  */
 export async function sendMessageToFirestore(
   senderId: string,
@@ -294,18 +583,20 @@ export async function sendMessageToFirestore(
     });
 
     // Notify receiver
-    const notifDocRef = doc(collection(db, 'notifications'));
-    await setDoc(notifDocRef, {
-      id: notifDocRef.id,
-      userId: receiverId,
-      type: 'match',
-      title: '💬 New Campus Message',
-      message: text.slice(0, 80),
-      isRead: false,
-      timestamp: nowIso,
-      linkTab: 'chat',
-      createdAt: nowIso,
-    });
+    if (receiverId) {
+      const notifDocRef = doc(collection(db, 'notifications'));
+      await setDoc(notifDocRef, {
+        id: notifDocRef.id,
+        userId: receiverId,
+        type: 'match',
+        title: '💬 New In-App Message',
+        message: text.slice(0, 60),
+        isRead: false,
+        timestamp: nowIso,
+        linkTab: 'chat',
+        createdAt: nowIso,
+      });
+    }
 
     return newMsg;
   } catch (error) {
@@ -315,13 +606,14 @@ export async function sendMessageToFirestore(
 }
 
 /**
- * Subscribe to messages for a conversation
+ * Subscribe to messages for a user
  */
 export function subscribeToMessages(
   userId: string,
   callback: (messages: Record<string, ChatMessage[]>) => void
 ) {
-  // Listen to messages where user is sender or receiver
+  if (!userId) return () => {};
+
   const q1 = query(
     collection(db, 'messages'),
     where('senderId', '==', userId),
@@ -355,17 +647,25 @@ export function subscribeToMessages(
     callback(grouped);
   };
 
-  const unsub1 = onSnapshot(q1, (snap) => {
-    sentMsgs = [];
-    snap.forEach((d) => sentMsgs.push({ ...d.data(), id: d.id } as any));
-    mergeAndGroup();
-  });
+  const unsub1 = onSnapshot(
+    q1,
+    (snap) => {
+      sentMsgs = [];
+      snap.forEach((d) => sentMsgs.push({ ...d.data(), id: d.id } as any));
+      mergeAndGroup();
+    },
+    (err) => console.warn('Sent messages sync notice:', err)
+  );
 
-  const unsub2 = onSnapshot(q2, (snap) => {
-    recvMsgs = [];
-    snap.forEach((d) => recvMsgs.push({ ...d.data(), id: d.id } as any));
-    mergeAndGroup();
-  });
+  const unsub2 = onSnapshot(
+    q2,
+    (snap) => {
+      recvMsgs = [];
+      snap.forEach((d) => recvMsgs.push({ ...d.data(), id: d.id } as any));
+      mergeAndGroup();
+    },
+    (err) => console.warn('Received messages sync notice:', err)
+  );
 
   return () => {
     unsub1();

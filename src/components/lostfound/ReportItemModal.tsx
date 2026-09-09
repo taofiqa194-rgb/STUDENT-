@@ -1,22 +1,22 @@
-import React, { useState } from 'react';
-import { motion } from 'motion/react';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   X,
   Search,
   CheckCircle2,
   MapPin,
   Calendar,
+  Clock,
   Camera,
-  HelpCircle,
-  Shield,
   Upload,
   AlertCircle,
   Tag,
-  DollarSign,
+  HelpCircle,
+  Trash2,
+  Sparkles,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { CampusLocation, ItemCategory } from '../../types';
-import { CAMPUS_LOCATIONS } from '../../data/mockData';
+import { ItemCategory, ItemType } from '../../types';
 
 interface ReportItemModalProps {
   isOpen: boolean;
@@ -25,24 +25,19 @@ interface ReportItemModalProps {
 }
 
 const CATEGORIES: ItemCategory[] = [
-  'Student ID Card',
   'Phone',
   'Laptop',
+  'Electronics',
+  'Student ID Card',
+  'ATM Card',
   'Keys',
   'Backpack',
-  'ATM Card',
-  'Earbuds',
+  'Bags',
+  'Books',
   'Notebook',
+  'Clothing',
+  'Accessories',
   'Other',
-];
-
-const HANDOVER_POINTS = [
-  'Main Campus Security Post',
-  'Faculty Office Desk',
-  'Department Secretary',
-  'Dean of Student Affairs Office',
-  'Library Front Reception',
-  'With finder (Private chat meetup)',
 ];
 
 export const ReportItemModal: React.FC<ReportItemModalProps> = ({
@@ -50,67 +45,134 @@ export const ReportItemModal: React.FC<ReportItemModalProps> = ({
   onClose,
   initialType = 'lost',
 }) => {
-  const { reportCampusItem, currentUser } = useApp();
+  const { reportLostItemAction, reportFoundItemAction, currentUser } = useApp();
 
   const [type, setType] = useState<'lost' | 'found'>(initialType);
-  const [title, setTitle] = useState('');
-  const [category, setCategory] = useState<ItemCategory>('Student ID Card');
+  const [itemName, setItemName] = useState('');
+  const [category, setCategory] = useState<ItemCategory>('Phone');
   const [description, setDescription] = useState('');
-  const [location, setLocation] = useState<CampusLocation>('University Library');
+  const [location, setLocation] = useState('');
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [reward, setReward] = useState('');
-  const [safeHandoverPoint, setSafeHandoverPoint] = useState(HANDOVER_POINTS[0]);
-  const [verificationQuestion, setVerificationQuestion] = useState('');
-  const [contactPreference, setContactPreference] = useState<'chat' | 'whatsapp'>('chat');
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [error, setError] = useState('');
-  const [matchNotice, setMatchNotice] = useState<string | null>(null);
+  const [time, setTime] = useState('');
+  const [identifyingDetails, setIdentifyingDetails] = useState('');
+
+  // Multiple image upload files & previews
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+
+  useEffect(() => {
+    setType(initialType);
+  }, [initialType]);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const newFiles = Array.from(files).slice(0, 5 - imageFiles.length); // limit to 5 images
+    const updatedFiles = [...imageFiles, ...newFiles];
+    setImageFiles(updatedFiles);
+
+    // Generate previews
+    newFiles.forEach((file) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreviews((prev) => [...prev, reader.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setImageFiles((prev) => prev.filter((_, i) => i !== index));
+    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !description.trim()) {
-      setError('Please provide a title and description.');
+    setErrorMessage('');
+
+    // Validation
+    if (!itemName.trim()) {
+      setErrorMessage('Please provide the item name.');
+      return;
+    }
+    if (!description.trim()) {
+      setErrorMessage('Please provide a short description.');
+      return;
+    }
+    if (!location.trim()) {
+      setErrorMessage(
+        type === 'lost'
+          ? 'Please enter the last known location.'
+          : 'Please enter the location where the item was found.'
+      );
+      return;
+    }
+    if (!date) {
+      setErrorMessage('Please select the date.');
       return;
     }
 
-    const newItem = reportCampusItem({
-      type,
-      title: title.trim(),
-      category,
-      description: description.trim(),
-      location,
-      date,
-      reward: reward ? parseFloat(reward) : undefined,
-      safeHandoverPoint: type === 'found' ? safeHandoverPoint : undefined,
-      verificationQuestion: type === 'found' && verificationQuestion.trim() ? verificationQuestion.trim() : undefined,
-      contactPreference,
-      imageUrl:
-        imagePreview ||
-        (type === 'lost'
-          ? 'https://images.unsplash.com/photo-1584438784894-089d6a62b8fa?w=600&auto=format&fit=crop&q=80'
-          : 'https://images.unsplash.com/photo-1544816155-12df9643f363?w=600&auto=format&fit=crop&q=80'),
-    });
+    setIsSubmitting(true);
+    try {
+      if (type === 'lost') {
+        await reportLostItemAction({
+          itemName: itemName.trim(),
+          category,
+          description: description.trim(),
+          location: location.trim(),
+          dateLost: date,
+          timeLost: time.trim(),
+          imageFiles,
+          identifyingDetails: identifyingDetails.trim(),
+          institution: currentUser?.institution || currentUser?.university,
+        });
+        setSuccessMessage('Your lost item has been reported successfully.');
+      } else {
+        await reportFoundItemAction({
+          itemName: itemName.trim(),
+          category,
+          description: description.trim(),
+          location: location.trim(),
+          dateFound: date,
+          timeFound: time.trim(),
+          imageFiles,
+          identifyingDetails: identifyingDetails.trim(),
+          institution: currentUser?.institution || currentUser?.university,
+        });
+        setSuccessMessage('Found item reported successfully.');
+      }
 
-    onClose();
-  };
-
-  const handleSimulatePhoto = () => {
-    // Pick sample realistic photo based on category
-    if (category === 'Phone') {
-      setImagePreview('https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=600&auto=format&fit=crop&q=80');
-    } else if (category === 'Laptop') {
-      setImagePreview('https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=600&auto=format&fit=crop&q=80');
-    } else if (category === 'Keys') {
-      setImagePreview('https://images.unsplash.com/photo-1582139329536-e7284fece509?w=600&auto=format&fit=crop&q=80');
-    } else {
-      setImagePreview('https://images.unsplash.com/photo-1584438784894-089d6a62b8fa?w=600&auto=format&fit=crop&q=80');
+      // Reset form after short delay and close modal
+      setTimeout(() => {
+        setItemName('');
+        setDescription('');
+        setLocation('');
+        setTime('');
+        setIdentifyingDetails('');
+        setImageFiles([]);
+        setImagePreviews([]);
+        setSuccessMessage('');
+        onClose();
+      }, 1400);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to submit report. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+    <div
+      id="report-item-modal-overlay"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
+    >
       <motion.div
         initial={{ scale: 0.95, opacity: 0, y: 15 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -118,253 +180,293 @@ export const ReportItemModal: React.FC<ReportItemModalProps> = ({
         id="report-item-modal"
         className="w-full max-w-lg my-auto bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-slate-900 dark:text-slate-100"
       >
-        <div className="p-5 pb-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">{type === 'lost' ? '🔎' : '📦'}</span>
+        {/* Header */}
+        <div className="p-5 pb-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400">
+              {type === 'lost' ? <Search className="w-5 h-5" /> : <Tag className="w-5 h-5" />}
+            </span>
             <div>
-              <h3 className="font-bold text-base font-display">
-                Report {type === 'lost' ? 'Lost Item' : 'Found Item'}
+              <h3 className="font-extrabold text-base font-display">
+                {type === 'lost' ? 'Report Lost Item' : 'Report Found Item'}
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Helping campus peers recover belongings safely
+                {type === 'lost'
+                  ? 'Let campus peers know what you are looking for'
+                  : 'Help return a found item safely to its rightful owner'}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full"
+            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full transition"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Tab switch between Lost and Found */}
-        <div className="p-5 pb-2">
-          <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl">
+        {/* Type Toggle Tabs */}
+        <div className="px-5 pt-3">
+          <div className="grid grid-cols-2 p-1 rounded-2xl bg-slate-100 dark:bg-slate-800">
             <button
               type="button"
+              id="report-tab-lost"
               onClick={() => setType('lost')}
-              className={`flex-1 py-2 text-xs font-semibold rounded-xl transition ${
+              className={`py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
                 type === 'lost'
-                  ? 'bg-rose-500 text-white shadow-xs'
-                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
+                  ? 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
-              🔴 I Lost an Item
+              <span>🔴 Report Lost</span>
             </button>
             <button
               type="button"
+              id="report-tab-found"
               onClick={() => setType('found')}
-              className={`flex-1 py-2 text-xs font-semibold rounded-xl transition ${
+              className={`py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
                 type === 'found'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'
+                  ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
-              🟢 I Found an Item
+              <span>🟢 Report Found</span>
             </button>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 pt-2 space-y-3.5 max-h-[72vh] overflow-y-auto">
-          {error && (
-            <div className="flex items-center gap-2 p-2.5 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 text-xs">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{error}</span>
+        {/* Form Body */}
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+          {errorMessage && (
+            <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{errorMessage}</span>
             </div>
           )}
 
-          {/* Title */}
+          {successMessage && (
+            <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-900 text-xs text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span className="font-bold">{successMessage}</span>
+            </div>
+          )}
+
+          {/* Item Name */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Item Title
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              Item Name *
             </label>
             <input
-              id="item-title-input"
               type="text"
-              value={title}
-              onChange={(e) => {
-                setTitle(e.target.value);
-                setError('');
-              }}
+              required
+              id="report-item-name-input"
+              value={itemName}
+              onChange={(e) => setItemName(e.target.value)}
               placeholder={
                 type === 'lost'
-                  ? 'e.g. Black iPhone 13 in Navy Pouch'
-                  : 'e.g. Silver Dell Charger with red tape'
+                  ? 'e.g. Black Samsung Galaxy A54 in blue case'
+                  : 'e.g. HP Laptop Charger with black tape'
               }
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-xs focus:ring-2 focus:ring-emerald-500 outline-hidden"
-              required
+              className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
             />
           </div>
 
-          {/* Category & Location */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Category
-              </label>
-              <select
-                id="item-category-select"
-                value={category}
-                onChange={(e) => setCategory(e.target.value as ItemCategory)}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-xs focus:ring-2 focus:ring-emerald-500 outline-hidden"
-              >
-                {CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                {type === 'lost' ? 'Location Where Lost' : 'Location Where Found'}
-              </label>
-              <select
-                id="item-location-select"
-                value={location}
-                onChange={(e) => setLocation(e.target.value as CampusLocation)}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-xs focus:ring-2 focus:ring-emerald-500 outline-hidden"
-              >
-                {CAMPUS_LOCATIONS.map((loc) => (
-                  <option key={loc} value={loc}>
-                    {loc}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {/* Category */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              Category *
+            </label>
+            <select
+              value={category}
+              id="report-item-category-select"
+              onChange={(e) => setCategory(e.target.value as ItemCategory)}
+              className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
+            >
+              {CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
           </div>
-
-          {/* Date & Optional Reward / Safe Handover */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                {type === 'lost' ? 'Date Lost' : 'Date Found'}
-              </label>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-xs focus:ring-2 focus:ring-emerald-500 outline-hidden"
-                required
-              />
-            </div>
-
-            {type === 'lost' ? (
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Optional Reward (₦)
-                </label>
-                <input
-                  type="number"
-                  value={reward}
-                  onChange={(e) => setReward(e.target.value)}
-                  placeholder="e.g. 5,000"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-xs focus:ring-2 focus:ring-emerald-500 outline-hidden"
-                />
-              </div>
-            ) : (
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Safe Handover Point
-                </label>
-                <select
-                  value={safeHandoverPoint}
-                  onChange={(e) => setSafeHandoverPoint(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-xs focus:ring-2 focus:ring-emerald-500 outline-hidden"
-                >
-                  {HANDOVER_POINTS.map((pt) => (
-                    <option key={pt} value={pt}>
-                      {pt}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-
-          {/* Verification Question for Found Items */}
-          {type === 'found' && (
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Verification Question (To confirm genuine owner)
-              </label>
-              <input
-                type="text"
-                value={verificationQuestion}
-                onChange={(e) => setVerificationQuestion(e.target.value)}
-                placeholder="e.g. What is the lock screen wallpaper? Or what name is on the card?"
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-xs focus:ring-2 focus:ring-emerald-500 outline-hidden"
-              />
-              <p className="text-[10px] text-slate-400 mt-1">
-                Claimants will answer this before retrieving the item.
-              </p>
-            </div>
-          )}
 
           {/* Description */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Description &amp; Identifying Details
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              Description *
             </label>
             <textarea
+              required
+              id="report-item-description-input"
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe color, stickers, scratches, or marks. Don't reveal full secret passwords or codes."
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-xs focus:ring-2 focus:ring-emerald-500 outline-hidden resize-none"
-              required
+              placeholder={
+                type === 'lost'
+                  ? 'Describe color, model, brand, key marks, and what was inside if applicable...'
+                  : 'Describe the condition and key visible characteristics without revealing hidden secrets...'
+              }
+              className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition resize-none"
             />
           </div>
 
-          {/* Photo upload / simulation */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Photo (Optional)
-            </label>
-            {imagePreview ? (
-              <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 h-32">
-                <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-                <button
-                  type="button"
-                  onClick={() => setImagePreview(null)}
-                  className="absolute top-2 right-2 p-1 rounded-full bg-black/60 text-white hover:bg-black/80"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+          {/* Location & Date Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                {type === 'lost' ? 'Last Known Location *' : 'Location Found *'}
+              </label>
+              <div className="relative">
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  required
+                  id="report-item-location-input"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="e.g. Science Lecture Theatre, Library 2nd floor"
+                  className="w-full pl-9 pr-3 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
+                />
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={handleSimulatePhoto}
-                className="w-full py-3 px-4 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl text-center hover:bg-slate-50 dark:hover:bg-slate-800/50 transition flex items-center justify-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-400"
-              >
-                <Camera className="w-4 h-4 text-slate-400" />
-                <span>Upload or attach photo</span>
-              </button>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                {type === 'lost' ? 'Date Lost *' : 'Date Found *'}
+              </label>
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="date"
+                  required
+                  id="report-item-date-input"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Approximate Time */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              Approximate Time (Optional)
+            </label>
+            <div className="relative">
+              <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                id="report-item-time-input"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                placeholder="e.g. Around 2:00 PM / Morning lecture"
+                className="w-full pl-9 pr-3 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
+              />
+            </div>
+          </div>
+
+          {/* Images Upload (Firebase Storage) */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                Upload Images (Up to 5 images)
+              </label>
+              <span className="text-[11px] text-slate-400">
+                {imageFiles.length}/5 uploaded
+              </span>
+            </div>
+
+            {/* Previews grid */}
+            {imagePreviews.length > 0 && (
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-2">
+                {imagePreviews.map((preview, idx) => (
+                  <div
+                    key={idx}
+                    className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 group"
+                  >
+                    <img src={preview} alt="Upload" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(idx)}
+                      className="absolute top-1 right-1 p-1 rounded-full bg-black/60 text-white hover:bg-rose-600 transition"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {imageFiles.length < 5 && (
+              <label className="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition bg-slate-50/50 dark:bg-slate-800/30">
+                <Camera className="w-6 h-6 text-slate-400 mb-1" />
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                  Click or drag photos here
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  Compressed & uploaded safely to Firebase Storage
+                </span>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  className="hidden"
+                />
+              </label>
             )}
           </div>
 
-          {/* Privacy & Safe Contact */}
-          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400">
-            <div className="flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-200 mb-1">
-              <Shield className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span>Safe Contact Policy</span>
+          {/* Optional Identifying Details */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                Optional Identifying Details / Verification
+              </label>
+              <span className="text-[10px] text-slate-400">
+                {type === 'found' ? 'To verify claimant' : 'Private marks'}
+              </span>
             </div>
-            <p>
-              Your phone number and private student email are kept hidden. Campus peers contact you via secure in-app chat.
-            </p>
+            <input
+              type="text"
+              id="report-item-identifying-input"
+              value={identifyingDetails}
+              onChange={(e) => setIdentifyingDetails(e.target.value)}
+              placeholder={
+                type === 'lost'
+                  ? 'e.g. Has a small heart sticker on the bottom left corner'
+                  : 'e.g. Name on notebook / lock screen picture question'
+              }
+              className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
+            />
           </div>
 
-          <button
-            id="submit-item-report-btn"
-            type="submit"
-            className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-99 text-white font-semibold text-xs rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-2"
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            <span>Publish Report</span>
-          </button>
+          {/* Submit Button */}
+          <div className="pt-2">
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              id={type === 'lost' ? 'submit-lost-item-btn' : 'submit-found-item-btn'}
+              className={`w-full py-3.5 px-4 rounded-2xl text-white font-bold text-sm shadow-md transition flex items-center justify-center gap-2 disabled:opacity-50 ${
+                type === 'lost'
+                  ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-900/20'
+                  : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/20'
+              }`}
+            >
+              {isSubmitting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Submitting to Firebase...</span>
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4" />
+                  <span>{type === 'lost' ? 'Submit Lost Item' : 'Submit Found Item'}</span>
+                </>
+              )}
+            </button>
+          </div>
         </form>
       </motion.div>
     </div>
